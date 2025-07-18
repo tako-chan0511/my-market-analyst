@@ -1,30 +1,16 @@
-<script setup lang="ts">
-import HelloWorld from './components/HelloWorld.vue'
-</script>
-
 <template>
-  <div>
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo" alt="Vite logo" />
-    </a>
-    <a href="https://vuejs.org/" target="_blank">
-      <img src="./assets/vue.svg" class="logo vue" alt="Vue logo" />
-    </a>
+  <div id="app">
+    <header class="app-header">
+      </header>
+    <main class="dashboard">
+      <section class="summary-section"> <p>トップサマリーはここに表示</p>
+      </section>
+      <section class="chart-section"> <p>株価チャートはここに表示</p>
+      </section>
+      <section class="analysis-section"> <p>AI分析レポートと対話機能はここに表示</p>
+      </section>
+      <section class="news-section"> <p>関連ニュース一覧はここに表示</p>
+      </section>
+    </main>
   </div>
-  <HelloWorld msg="Vite + Vue" />
 </template>
-
-<style scoped>
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: filter 300ms;
-}
-.logo:hover {
-  filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.vue:hover {
-  filter: drop-shadow(0 0 2em #42b883aa);
-}
-</style>
