@@ -73,29 +73,38 @@ const errorAnswer = ref('');
 
 const getAnalysis = async () => {
   if (!companyName.value) {
-    error.value = "企業名を入力してください。";
+    error.value = '企業名を入力してください。';
     return;
   }
   loading.value = true;
-  error.value = "";
-  analysisReport.value = "";
-  qaHistory.value = []; // ★★この行を追加★★
+  error.value = '';
+  analysisReport.value = '';
+  qaHistory.value = [];
 
   try {
-    // 新しく作成したバックエンドAPIを呼び出す
-    const res = await fetch("/api/analyze-company-news", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
+    const res = await fetch('/api/analyze-company-news', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ companyName: companyName.value }),
     });
     const data = await res.json();
 
     if (!res.ok) {
-      throw new Error(data.error || "分析に失敗しました。");
+      throw new Error(data.error || '分析に失敗しました。');
     }
     analysisReport.value = data.report;
+    
   } catch (e: any) {
-    error.value = e.message;
+    // ★★ここからが変更点★★
+    // エラーメッセージに「503」が含まれているかチェック
+    if (e.message && e.message.includes('503')) {
+      // 含まれていれば、ユーザー向けのメッセージに置き換える
+      error.value = '現在、AIサーバーへのリクエストが混み合っているようです。大変お手数ですが、1分ほど時間をおいてから再度お試しください。';
+    } else {
+      // それ以外のエラーは、そのまま表示
+      error.value = e.message;
+    }
+    // ★★ここまでが変更点★★
   } finally {
     loading.value = false;
   }
@@ -109,12 +118,10 @@ const askQuestion = async () => {
   const currentQuestion = followUpQuestion.value;
   
   try {
-    // 新しく作成するバックエンドAPIを呼び出す
     const res = await fetch('/api/ask-follow-up', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        // 元のレポートと新しい質問をコンテキストとして渡す
         analysisReport: analysisReport.value,
         question: currentQuestion,
       }),
@@ -125,12 +132,20 @@ const askQuestion = async () => {
       throw new Error(data.error || '回答の生成に失敗しました。');
     }
     
-    // 対話履歴の先頭に新しいQ&Aを追加
     qaHistory.value.unshift({ question: currentQuestion, answer: data.answer });
-    followUpQuestion.value = ''; // 質問入力欄をクリア
+    followUpQuestion.value = '';
 
   } catch (e: any) {
-    errorAnswer.value = e.message;
+    // ★★ここからが変更点★★
+    // エラーメッセージに「503」が含まれているかチェック
+    if (e.message && e.message.includes('503')) {
+      // 含まれていれば、ユーザー向けのメッセージに置き換える
+      errorAnswer.value = '現在、AIサーバーが混み合っているようです。少し時間をおいてから、もう一度ご質問ください。';
+    } else {
+      // それ以外のエラーは、そのまま表示
+      errorAnswer.value = e.message;
+    }
+    // ★★ここまでが変更点★★
   } finally {
     loadingAnswer.value = false;
   }
@@ -164,10 +179,18 @@ const askQuestion = async () => {
   margin: 1rem;
 }
 .loading-spinner {
-  /* my-daily-digestからコピー */
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 2rem auto;
 }
+
 .markdown-body {
-  /* my-daily-digestからコピー */
+  line-height: 1.7;
+  text-align: left; /* ★★ この一行を追加 ★★ */
 }
 
 .follow-up-section > h3 {

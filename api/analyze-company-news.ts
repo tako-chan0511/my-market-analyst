@@ -42,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // ★★ キャッシュキーを「レポート」用に変更 ★★
     const cacheKey = `report:${companyName.toLowerCase().replace(/\s/g, '')}`;
-    const CACHE_DURATION_SECONDS = 3600; // 1時間
+    const CACHE_DURATION_SECONDS = 86400; // 24時間
 
     // ★★ 1. まずKVから「最終分析レポート」のキャッシュを探す ★★
     const cachedReport: string | null = await kv.get(cacheKey);
