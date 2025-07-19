@@ -9,9 +9,13 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "cheerio": "^1.1.0",
+    "marked": "^16.1.1",
     "vue": "^3.5.17"
   },
   "devDependencies": {
+    "@types/cheerio": "^0.22.35",
+    "@types/marked": "^5.0.2",
     "@types/node": "^24.0.14",
     "@vercel/node": "^5.3.6",
     "@vitejs/plugin-vue": "^6.0.0",
