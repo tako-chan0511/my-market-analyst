@@ -19,7 +19,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const prompt = `
       あなたは優秀なマーケットアナリストです。
-      以下の「これまでの分析レポート」の内容を踏まえた上で、ユーザーからの「追加の質問」に、専門家として簡潔かつ的確に回答してください。
+      以下の「これまでの分析レポート」の内容を踏まえた上で、ユーザーからの「追加の質問」に、専門家として回答してください。
+      
+      【重要】回答は必ず以下のルールに従ってください。
+      - 全体をMarkdown形式で、見出し、太字、リストなどを使用して構造化する。
+      - 企業間の比較を求められた場合は、必ずMarkdownのテーブル形式（表）で見やすくまとめる。
+      - 特に強調したいキーワードは **太字** で表現する。
 
       ---これまでの分析レポート---
       ${analysisReport}
@@ -27,22 +32,31 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ---追加の質問---
       ${question}
       
-      ---回答（Markdown形式）---
+      ---回答---
     `;
     
+    // 通常のコンテンツ生成APIエンドポイント
     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${geminiApiKey}`;
+    
     const apiResponse = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
     });
 
-    if (!apiResponse.ok) throw new Error(`AI APIがエラー: ${apiResponse.status}`);
+    if (!apiResponse.ok) {
+      const errorText = await apiResponse.text();
+      throw new Error(`AI APIがエラー: ${apiResponse.status} ${errorText}`);
+    }
     
     const responseData = await apiResponse.json();
     const answer = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!answer) throw new Error('AIからの応答が空です。');
+    
+    if (!answer) {
+      throw new Error('AIからの応答が空です。');
+    }
 
+    // 回答全体をJSONで返す
     res.status(200).json({ answer: answer.trim() });
 
   } catch (error: any) {
