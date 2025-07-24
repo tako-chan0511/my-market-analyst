@@ -20,6 +20,12 @@
       <div v-if="error" class="error-message">{{ error }}</div>
 
       <section v-if="analysisReport" class="analysis-report">
+        <!-- ADDED: 注目度スコアを表示するラッパー -->
+        <div class="attention-score-wrapper">
+          <strong>注目度スコア: </strong>
+          <span class="attention-score">{{ attentionScore }}</span>
+        </div>
+        
         <div class="markdown-body" v-html="marked(analysisReport)"></div>
 
         <div class="follow-up-section">
@@ -59,8 +65,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue'; // ADDED: computed をインポート
 import { marked } from "marked";
+import { calculateAttentionScore } from './utils/attentionScore'; // ADDED: 作成した関数をインポート
 
 // --- State ---
 const companyName = ref("");
@@ -72,6 +79,15 @@ const followUpQuestion = ref('');
 const qaHistory = ref<{ question: string; answer: string }[]>([]);
 const loadingAnswer = ref(false);
 const errorAnswer = ref('');
+
+// ADDED: 注目度スコアを算出する算出プロパティ
+const attentionScore = computed(() => {
+  if (!analysisReport.value) {
+    return 0;
+  }
+  return calculateAttentionScore(analysisReport.value);
+});
+
 
 // --- Methods ---
 
@@ -355,6 +371,22 @@ const askQuestion = async () => {
 /* Markdownの強調文字（太字）用スタイル */
 .markdown-body strong {
   color: #0d6efd; /* BootstrapのPrimaryカラーに近い青色 */
+}
+
+/* ADDED: 注目度スコア用のスタイル */
+.attention-score-wrapper {
+  background-color: #e7f3ff;
+  border-left: 5px solid #007bff;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: 4px;
+  font-size: 1.1rem;
+}
+
+.attention-score {
+  font-weight: bold;
+  font-size: 1.5rem;
+  color: #0056b3;
 }
 /* --- ここまで追加 --- */
 </style>
