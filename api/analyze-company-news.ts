@@ -3,7 +3,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as cheerio from 'cheerio';
 import { kv } from '@vercel/kv';
 
-// ヘルパー関数：指定されたURLから本文を抽出する（変更なし）
 async function scrapeArticleText(url: string): Promise<string> {
   try {
     const articleResponse = await fetch(url, {
@@ -40,14 +39,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    // ★★ キャッシュキーを「レポート」用に変更 ★★
     const cacheKey = `report:${companyName.toLowerCase().replace(/\s/g, '')}`;
     const CACHE_DURATION_SECONDS = 86400; // 24時間
 
-    // ★★ 1. まずKVから「最終分析レポート」のキャッシュを探す ★★
     const cachedReport: string | null = await kv.get(cacheKey);
 
-    // ★★ 2. キャッシュがあれば、即座にそれを返して処理を終了 ★★
     if (cachedReport) {
       console.log(`[Cache Hit] for report: ${cacheKey}. Returning cached report.`);
       return res.status(200).json({ report: cachedReport });
@@ -55,9 +51,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     console.log(`[Cache Miss] for report: ${cacheKey}. Generating new report.`);
 
-    // --- 以下はキャッシュがなかった場合のみ実行される ---
-
-    // 3. GNews APIで関連ニュースを検索
     const gnewsParams = new URLSearchParams({
       q: companyName,
       lang: 'ja',
@@ -67,7 +60,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     const gnewsUrl = `https://gnews.io/api/v4/search?${gnewsParams.toString()}`;
     const gnewsRes = await fetch(gnewsUrl);
-    if (!gnewsRes.ok) throw new Error('GNews APIからのニュース取得に失敗しました。');
+    
+    // === ここからが修正箇所です ===
+    if (!gnewsRes.ok) {
+        const errorData = await gnewsRes.json();
+        console.error('GNews API Error:', { status: gnewsRes.status, body: errorData });
+
+        if (gnewsRes.status === 401) {
+            // 401 Unauthorized: APIキーが不正
+            return res.status(401).json({ error: 'ニュースAPIの認証に失敗しました。APIキーを確認してください。' });
+        }
+        if (gnewsRes.status === 429) {
+            // 429 Too Many Requests: 利用上限
+            return res.status(429).json({ error: 'ニュースAPIの利用上限に達しました。しばらく時間をおいてから再度お試しください。' });
+        }
+        // その他のエラー
+        throw new Error('GNews APIからのニュース取得中に予期せぬエラーが発生しました。');
+    }
+    // === ここまでが修正箇所です ===
     
     const newsData = await gnewsRes.json();
     const articles = newsData.articles || [];
@@ -76,7 +86,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: '関連するニュースが見つかりませんでした。' });
     }
 
-    // 4. 各ニュース記事の本文を並行してスクレイピング
     const scrapingPromises = articles.map((article: any) => scrapeArticleText(article.url));
     const allArticleTexts = (await Promise.all(scrapingPromises)).filter(text => text.length > 100);
 
@@ -84,7 +93,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       throw new Error('ニュース記事から十分なテキストを抽出できませんでした。');
     }
 
-    // 5. Gemini APIに分析を依頼
     const combinedText = allArticleTexts.join('\n\n---\n\n');
     const prompt = `
       あなたは優秀なマーケットアナリストです。以下の最新ニュース記事群を元に、「${companyName}」の現在の経営状況、市場での評判、そして将来的なリスクとチャンスについて、多角的に分析し、レポートをMarkdown形式で作成してください。
@@ -113,11 +121,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const finalReport = analysisReport.trim();
 
-    // ★★ 6. 生成した「最終分析レポート」をKVに保存する ★★
     await kv.set(cacheKey, finalReport, { ex: CACHE_DURATION_SECONDS });
     console.log(`[Cache Set] for report: ${cacheKey}`);
 
-    // 7. フロントエンドに分析レポートを返す
     res.status(200).json({ report: finalReport });
 
   } catch (error: any) {
