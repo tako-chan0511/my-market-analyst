@@ -7,9 +7,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "happy-dom",
-    transformMode: {
-      web: [/\.[jt]sx$/],
-    },
+    // transformMode: {
+    //   web: [/\.[jt]sx$/],
+    // },
   },
   // ★★★ resolve.alias設定を追加 ★★★
   resolve: {
