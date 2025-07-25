@@ -20,6 +20,12 @@
       <div v-if="error" class="error-message">{{ error }}</div>
 
       <section v-if="analysisReport" class="analysis-report">
+        <div class="attention-score-wrapper">
+          <!-- MODIFIED: 表示内容を変更 -->
+          <strong>注目度: </strong>
+          <span class="attention-score">{{ attentionLevel }} ({{ attentionScore }})</span>
+        </div>
+        
         <div class="markdown-body" v-html="marked(analysisReport)"></div>
 
         <div class="follow-up-section">
@@ -59,8 +65,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { marked } from "marked";
+// MODIFIED: getAttentionLevel もインポート
+import { calculateAttentionScore, getAttentionLevel } from './utils/attentionScore';
 
 // --- State ---
 const companyName = ref("");
@@ -72,6 +80,20 @@ const followUpQuestion = ref('');
 const qaHistory = ref<{ question: string; answer: string }[]>([]);
 const loadingAnswer = ref(false);
 const errorAnswer = ref('');
+
+// 注目度スコアを算出する算出プロパティ (変更なし)
+const attentionScore = computed(() => {
+  if (!analysisReport.value) {
+    return 0;
+  }
+  return calculateAttentionScore(analysisReport.value);
+});
+
+// ADDED: スコアからレベルを判定する新しい算出プロパティ
+const attentionLevel = computed(() => {
+  return getAttentionLevel(attentionScore.value);
+});
+
 
 // --- Methods ---
 
@@ -139,6 +161,7 @@ const askQuestion = async () => {
 </script>
 
 <style>
+/* スタイルは変更なし */
 #app {
   font-family: Avenir, Helvetica, Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -330,8 +353,6 @@ const askQuestion = async () => {
   margin: 0;
 }
 
-/* --- ここから追加 --- */
-/* Markdownのテーブル用スタイル */
 .markdown-body table {
   width: 100%;
   border-collapse: collapse;
@@ -352,9 +373,22 @@ const askQuestion = async () => {
   background-color: #f6f8fa;
 }
 
-/* Markdownの強調文字（太字）用スタイル */
 .markdown-body strong {
-  color: #0d6efd; /* BootstrapのPrimaryカラーに近い青色 */
+  color: #0d6efd;
 }
-/* --- ここまで追加 --- */
+
+.attention-score-wrapper {
+  background-color: #e7f3ff;
+  border-left: 5px solid #007bff;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  border-radius: 4px;
+  font-size: 1.1rem;
+}
+
+.attention-score {
+  font-weight: bold;
+  font-size: 1.5rem;
+  color: #0056b3;
+}
 </style>
