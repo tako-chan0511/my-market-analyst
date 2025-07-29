@@ -20,6 +20,14 @@
       <div v-if="error" class="error-message">{{ error }}</div>
 
       <section v-if="analysisReport" class="analysis-report">
+        <!-- 注目度スコア表示エリア(レベル表示に対応) -->
+        <div class="attention-score-container" :class="attentionLevel.class">
+          <h3>
+            注目度レベル: <span class="level-text">{{ attentionLevel.text }}</span>
+            <span class="score-value">(スコア: {{ attentionScore }})</span>
+          </h3>
+        </div>
+
         <div class="markdown-body" v-html="marked(analysisReport)"></div>
 
         <div class="follow-up-section">
@@ -59,22 +67,36 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, computed } from 'vue'; // computedをインポート
 import { marked } from "marked";
+import { calculateAttentionScore } from './utils/attentionScore';
 
 // --- State ---
 const companyName = ref("");
 const analysisReport = ref("");
 const loading = ref(false);
 const error = ref("");
+const attentionScore = ref(0);
 
 const followUpQuestion = ref('');
 const qaHistory = ref<{ question: string; answer: string }[]>([]);
 const loadingAnswer = ref(false);
 const errorAnswer = ref('');
 
-// --- Methods ---
+// --- Computed ---
+// スコアに基づいてレベルとCSSクラスを決定する算出プロパティ
+const attentionLevel = computed(() => {
+  const score = attentionScore.value;
+  if (score >= 25) {
+    return { text: '高', class: 'level-high' };
+  } else if (score >= 10) {
+    return { text: '中', class: 'level-medium' };
+  } else {
+    return { text: '低', class: 'level-low' };
+  }
+});
 
+// --- Methods ---
 const getAnalysis = async () => {
   if (!companyName.value) {
     error.value = '企業名を入力してください。';
@@ -84,6 +106,7 @@ const getAnalysis = async () => {
   error.value = '';
   analysisReport.value = '';
   qaHistory.value = [];
+  attentionScore.value = 0;
 
   try {
     const res = await fetch('/api/analyze-company-news', {
@@ -97,6 +120,7 @@ const getAnalysis = async () => {
       throw new Error(data.error || '分析に失敗しました。');
     }
     analysisReport.value = data.report;
+    attentionScore.value = calculateAttentionScore(data.report);
     
   } catch (e: any) {
     error.value = e.message;
@@ -202,6 +226,58 @@ const askQuestion = async () => {
   border-radius: 8px;
   background-color: #fff;
 }
+
+/* --- 注目度スコア用のスタイルを更新 --- */
+.attention-score-container {
+  padding: 0.75rem 1.25rem;
+  border-radius: 8px;
+  margin-bottom: 1.5rem;
+  text-align: center;
+  border: 1px solid;
+  transition: background-color 0.3s, border-color 0.3s;
+}
+
+.attention-score-container h3 {
+  margin: 0;
+  font-size: 1.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.attention-score-container .level-text {
+  font-weight: bold;
+  font-size: 1.5rem;
+  margin-left: 0.5rem;
+  margin-right: 0.25rem;
+}
+
+.attention-score-container .score-value {
+  font-size: 1rem;
+  font-weight: normal;
+  margin-left: 0.5rem;
+  opacity: 0.8;
+}
+
+/* レベル別のカラースタイル */
+.level-high {
+  background-color: #f8d7da; /* 赤系 */
+  border-color: #f5c6cb;
+  color: #721c24;
+}
+
+.level-medium {
+  background-color: #fff3cd; /* 黄色系 */
+  border-color: #ffeeba;
+  color: #856404;
+}
+
+.level-low {
+  background-color: #e2e3e5; /* 青系から変更 -> グレイ系 */
+  border-color: #d6d8db;
+  color: #383d41;
+}
+/* --- ここまで更新 --- */
 
 .error-message {
   color: #dc3545;
@@ -330,8 +406,6 @@ const askQuestion = async () => {
   margin: 0;
 }
 
-/* --- ここから追加 --- */
-/* Markdownのテーブル用スタイル */
 .markdown-body table {
   width: 100%;
   border-collapse: collapse;
@@ -352,9 +426,7 @@ const askQuestion = async () => {
   background-color: #f6f8fa;
 }
 
-/* Markdownの強調文字（太字）用スタイル */
 .markdown-body strong {
-  color: #0d6efd; /* BootstrapのPrimaryカラーに近い青色 */
+  color: #0d6efd;
 }
-/* --- ここまで追加 --- */
 </style>
