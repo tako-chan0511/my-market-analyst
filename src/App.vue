@@ -1,7 +1,7 @@
 <template>
   <div id="app">
     <header class="app-header">
-      <h1>簡易マーケット・アナリスト</h1>
+      <h1>ＡＩマーケットアナリスト</h1>
       <div class="search-container">
         <input
           v-model="companyName"
