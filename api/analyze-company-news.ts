@@ -24,6 +24,8 @@ async function scrapeArticleText(url: string): Promise<string> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  console.log('=== analyze-company-news handler called at', new Date().toISOString(), '===');
+  
   if (req.method !== 'POST') {
     return res.status(405).json({ error: "POST method required." });
   }
@@ -40,6 +42,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
+    console.log('=== Starting analyze-company-news handler ===');
+    console.log('Company name:', companyName);
+    
     // ★★ キャッシュキーを「レポート」用に変更 ★★
     const cacheKey = `report:${companyName.toLowerCase().replace(/\s/g, '')}`;
     const CACHE_DURATION_SECONDS = 86400*7; // 24時間*7日間
