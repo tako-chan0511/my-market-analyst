@@ -14,7 +14,8 @@ async function scrapeArticleText(url: string): Promise<string> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  console.log('=== [VER 2.3] Gemini API FIX BASED ON REPORT ===');
+  // 動作確認のためのログ
+  console.log('=== [VER 2.5] Gemini 2.5-Flash Stable ===');
   
   if (req.method !== 'POST') return res.status(405).end();
   const { companyName } = req.body;
@@ -28,43 +29,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const gnewsUrl = `https://gnews.io/api/v4/search?q=${encodeURIComponent(companyName)}&lang=ja&country=jp&max=3&apikey=${gnewsApiKey}`;
     const gnewsRes = await fetch(gnewsUrl);
     const newsData: any = await gnewsRes.json();
+    
+    // 配列チェックを厳格化して res.map エラーを防止
     const articles = (newsData && Array.isArray(newsData.articles)) ? newsData.articles : [];
 
-    if (articles.length === 0) return res.status(404).json({ error: 'ニュースが見つかりませんでした。' });
+    if (articles.length === 0) return res.status(404).json({ error: '関連ニュースが見つかりませんでした。' });
 
     // 2. スクレイピング
     const articleTexts = await Promise.all(articles.map((a: any) => scrapeArticleText(a.url)));
     const combinedText = articleTexts.filter(t => t.length > 50).join('\n\n---\n\n');
 
-    // 3. Gemini API (修正版エンドポイント)
-    // リポートを参考に、/v1/ エンドポイントと確定モデル名を使用
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
+    // 3. Gemini API 呼び出し (本日午前中に動作確認済みの設定を適用)
+    const prompt = `マーケットアナリストとして「${companyName}」の分析レポートをMarkdown形式で作成してください。\n\n資料：\n${combinedText}`;
+    const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
     
-    console.log('[DEBUG] Calling Gemini API...');
-    const geminiRes = await fetch(geminiUrl, {
+    console.log('[DEBUG] Calling Gemini API (2.5-flash)...');
+    const apiResponse = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: `マーケットアナリストとして「${companyName}」の分析レポートを作成してください。\n\n資料：\n${combinedText}` }]
-        }]
-      })
+      body: JSON.stringify({ 
+        contents: [{ 
+          parts: [{ text: prompt }] 
+        }] 
+      }),
     });
 
-    // リポートの教訓：エラー時は json() ではなく text() で詳細を確認する
-    if (!geminiRes.ok) {
-      const errorText = await geminiRes.text();
-      console.error(`[ERROR] Gemini API Detail: ${errorText}`);
-      throw new Error(`Gemini API Error: ${geminiRes.status}`);
+    // 404などのエラー時に詳細をログ出力する
+    if (!apiResponse.ok) {
+      const errorData = await apiResponse.text();
+      console.error(`[ERROR] Gemini API Error Response: ${errorData}`);
+      throw new Error(`AI APIがエラー: ${apiResponse.status}`);
     }
+    
+    const responseData = await apiResponse.json();
+    const analysisReport = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
 
-    const geminiData = await geminiRes.json();
-    const analysisReport = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!analysisReport) {
-      console.error('[ERROR] Unexpected structure:', JSON.stringify(geminiData));
-      throw new Error('AIからの応答構造が不正です。');
-    }
+    if (!analysisReport) throw new Error('AIからの応答が空です。');
 
     // 4. キャッシュ保存と返却
     await kv.set(cacheKey, analysisReport.trim(), { ex: 86400 * 7 });
