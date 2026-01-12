@@ -3,7 +3,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as cheerio from 'cheerio';
 import { kv } from '@vercel/kv';
 
-// ヘルパー関数：指定されたURLから本文を抽出する
 async function scrapeArticleText(url: string): Promise<string> {
   try {
     const articleResponse = await fetch(url, {
@@ -12,7 +11,6 @@ async function scrapeArticleText(url: string): Promise<string> {
       }
     });
     if (!articleResponse.ok) return "";
-    
     const html = await articleResponse.text();
     const $ = cheerio.load(html);
     $('script, style, noscript, nav, footer, header, aside, form').remove();
@@ -24,7 +22,8 @@ async function scrapeArticleText(url: string): Promise<string> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  console.log('=== analyze-company-news handler called at', new Date().toISOString(), '===');
+  // 反映確認用の目立つログ
+  console.log('=== [VER 2.1 - CACHE DISABLED] analyze-company-news called ===');
   
   if (req.method !== 'POST') {
     return res.status(405).json({ error: "POST method required." });
@@ -34,56 +33,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const gnewsApiKey = process.env.GNEWS_API_KEY;
   const geminiApiKey = process.env.GEMINI_API_KEY;
 
-  if (!companyName) {
-    return res.status(400).json({ error: '企業名が必要です。' });
-  }
-  if (!gnewsApiKey || !geminiApiKey) {
-    return res.status(500).json({ error: 'APIキーがサーバーに設定されていません。' });
-  }
+  if (!companyName) return res.status(400).json({ error: '企業名が必要です。' });
+  if (!gnewsApiKey || !geminiApiKey) return res.status(500).json({ error: 'APIキー未設定' });
 
   try {
-    console.log('=== Starting analyze-company-news handler ===');
-    console.log('Company name:', companyName);
-    
     const cacheKey = `report:${companyName.toLowerCase().replace(/\s/g, '')}`;
-    const CACHE_DURATION_SECONDS = 86400 * 7; // 7日間
 
-    // 1. KVキャッシュ確認
-    const cachedReport: string | null = await kv.get(cacheKey);
+    // --- 【動作確認のため一時的にキャッシュを無効化】 ---
+    // const cachedReport: string | null = await kv.get(cacheKey);
+    const cachedReport = null; 
+    
     if (cachedReport) {
-      console.log(`[Cache Hit] for report: ${cacheKey}`);
+      console.log(`[Cache Hit] returning cached report.`);
       return res.status(200).json({ report: cachedReport });
     }
-    
-    console.log(`[Cache Miss] for report: ${cacheKey}. Generating new report.`);
 
-    // 2. GNews API検索
-    const gnewsParams = new URLSearchParams({
-      q: companyName,
-      lang: 'ja',
-      country: 'jp',
-      max: '5',
-      apikey: gnewsApiKey,
-    });
-    const gnewsUrl = `https://gnews.io/api/v4/search?${gnewsParams.toString()}`;
-    
+    const gnewsUrl = `https://gnews.io/api/v4/search?q=${encodeURIComponent(companyName)}&lang=ja&country=jp&max=5&apikey=${gnewsApiKey}`;
     const gnewsRes = await fetch(gnewsUrl);
     const newsData: any = await gnewsRes.json();
-    
-    if (!gnewsRes.ok) {
-      throw new Error(`GNews API Error: ${gnewsRes.status} ${newsData?.errors?.join(', ') || ''}`);
-    }
-    
-    // 【修正ポイント】articles が確実に配列であることを保証する
-    // これにより "res.map is not a function" エラーを防止します
+
+    if (!gnewsRes.ok) throw new Error(`GNews Error: ${gnewsRes.status}`);
+
+    // 【最重要】articles の存在と配列チェックを厳格に行う
     const articles = (newsData && Array.isArray(newsData.articles)) ? newsData.articles : [];
-    console.log('Articles count:', articles.length);
+    console.log('Detected articles count:', articles.length);
 
     if (articles.length === 0) {
-      return res.status(404).json({ error: '関連するニュースが見つかりませんでした。' });
+      return res.status(404).json({ error: '関連ニュースが見つかりませんでした。' });
     }
 
-    // 3. スクレイピング（並行処理）
+    // スクレイピング処理
     const scrapingPromises = articles.map((article: any) => {
       if (!article || !article.url) return Promise.resolve("");
       return scrapeArticleText(article.url);
@@ -92,25 +71,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const articleTexts = await Promise.all(scrapingPromises);
     const allArticleTexts = articleTexts.filter(text => text && text.length > 100);
 
-    if (allArticleTexts.length === 0) {
-      throw new Error('ニュース記事から十分なテキストを抽出できませんでした。');
-    }
+    if (allArticleTexts.length === 0) throw new Error('記事本文を抽出できませんでした。');
 
-    // 4. Gemini API分析
-    const combinedText = allArticleTexts.join('\n\n---\n\n');
-    const prompt = `
-      あなたは優秀なマーケットアナリストです。以下の最新ニュース記事群を元に、「${companyName}」の現在の経営状況、市場での評判、そして将来的なリスクとチャンスについて、多角的に分析し、レポートをMarkdown形式で作成してください。
-      レポートの構成：
-      * **総合的な状況（サマリー）**
-      * **ポジティブな要因**
-      * **ネガティブな要因**
-      * **将来性の考察**
-      ---ニュース記事群---
-      ${combinedText}
-    `;
-
-    // 安定版 v1 エンドポイントを使用
+    // Gemini分析
+    const prompt = `マーケットアナリストとして「${companyName}」を分析してください。\n\n記事本文：\n${allArticleTexts.join('\n\n')}`;
     const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+    
     const geminiRes = await fetch(geminiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -118,22 +84,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     const geminiData = await geminiRes.json();
-
-    if (!geminiRes.ok) {
-      throw new Error(`Gemini API Error: ${geminiData?.error?.message || geminiRes.status}`);
-    }
-    
     const analysisReport = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!analysisReport) throw new Error('AIからの応答が空です。');
 
-    const finalReport = analysisReport.trim();
+    if (!analysisReport) throw new Error('AI応答が空です');
 
-    // 5. キャッシュ保存と返却
-    await kv.set(cacheKey, finalReport, { ex: CACHE_DURATION_SECONDS });
-    res.status(200).json({ report: finalReport });
+    // 成功したらキャッシュに保存（※読み込みはスキップ中）
+    await kv.set(cacheKey, analysisReport, { ex: 86400 * 7 });
+    
+    res.status(200).json({ report: analysisReport.trim() });
 
   } catch (error: any) {
-    console.error('An error occurred:', error.message);
-    res.status(500).json({ error: error.message || 'サーバーでエラーが発生しました。' });
+    console.error('Error detail:', error.message);
+    res.status(500).json({ error: error.message });
   }
 }
