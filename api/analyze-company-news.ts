@@ -38,7 +38,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // 3. Gemini API (修正版エンドポイント)
     // リポートを参考に、/v1/ エンドポイントと確定モデル名を使用
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
     
     console.log('[DEBUG] Calling Gemini API...');
     const geminiRes = await fetch(geminiUrl, {
