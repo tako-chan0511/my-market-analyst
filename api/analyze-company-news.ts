@@ -69,14 +69,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('Fetching GNews from:', gnewsUrl.replace(gnewsApiKey, 'REDACTED'));
     const gnewsRes = await fetch(gnewsUrl);
     
+    let newsData;
+    try {
+      newsData = await gnewsRes.json();
+    } catch (e) {
+      console.error('Failed to parse GNews response:', e);
+      throw new Error('GNews APIからのレスポンスが不正な形式です');
+    }
+    
     if (!gnewsRes.ok) {
-      const errorData = await gnewsRes.json();
-      const errorMsg = `GNews API request failed: ${gnewsRes.status} ${errorData?.errors?.join(', ') || 'Unknown error'}`;
+      const errorMsg = `GNews API request failed: ${gnewsRes.status} ${newsData?.errors?.join(', ') || 'Unknown error'}`;
       console.error(errorMsg);
       throw new Error(errorMsg);
     }
     
-    const newsData = await gnewsRes.json();
     console.log('GNews response:', JSON.stringify(newsData).substring(0, 500));
     
     const articles = newsData.articles || [];
@@ -118,13 +124,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
     });
 
+    let geminiData;
+    try {
+      geminiData = await geminiRes.json();
+    } catch (e) {
+      console.error('Failed to parse Gemini response:', e);
+      throw new Error('Gemini APIからのレスポンスが不正な形式です');
+    }
+
     if (!geminiRes.ok) {
-      const errorText = await geminiRes.text();
-      console.error(`Gemini API Error: ${geminiRes.status}`, errorText);
-      throw new Error(`AI API がエラー: ${geminiRes.status} - ${errorText.substring(0, 200)}`);
+      const errorMsg = `Gemini API request failed: ${geminiRes.status} ${geminiData?.error?.message || 'Unknown error'}`;
+      console.error(errorMsg);
+      throw new Error(errorMsg);
     }
     
-    const geminiData = await geminiRes.json();
     const analysisReport = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!analysisReport) throw new Error('AIからの応答が空です。');

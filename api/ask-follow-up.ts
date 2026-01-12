@@ -44,12 +44,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
     });
 
+    let responseData;
+    try {
+      responseData = await apiResponse.json();
+    } catch (e) {
+      console.error('Failed to parse Gemini response:', e);
+      throw new Error('Gemini APIからのレスポンスが不正な形式です');
+    }
+
     if (!apiResponse.ok) {
-      const errorData = await apiResponse.json();
-      throw new Error(`Gemini API request failed: ${apiResponse.status} ${errorData?.error?.message || 'Unknown error'}`);
+      throw new Error(`Gemini API request failed: ${apiResponse.status} ${responseData?.error?.message || 'Unknown error'}`);
     }
     
-    const responseData = await apiResponse.json();
     const answer = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
     
     if (!answer) {
