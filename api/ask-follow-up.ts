@@ -45,8 +45,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
 
     if (!apiResponse.ok) {
-      const errorText = await apiResponse.text();
-      throw new Error(`AI APIがエラー: ${apiResponse.status} ${errorText}`);
+      const errorData = await apiResponse.json();
+      throw new Error(`Gemini API request failed: ${apiResponse.status} ${errorData?.error?.message || 'Unknown error'}`);
     }
     
     const responseData = await apiResponse.json();
@@ -61,6 +61,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error: any) {
     console.error('An error occurred in ask-follow-up handler:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message || 'サーバーでエラーが発生しました。' });
   }
 }

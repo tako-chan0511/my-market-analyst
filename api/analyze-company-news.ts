@@ -70,9 +70,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const gnewsRes = await fetch(gnewsUrl);
     
     if (!gnewsRes.ok) {
-      const errorText = await gnewsRes.text();
-      console.error(`GNews API Error: ${gnewsRes.status}`, errorText);
-      throw new Error(`GNews APIからのニュース取得に失敗しました (ステータス: ${gnewsRes.status})`);
+      const errorData = await gnewsRes.json();
+      const errorMsg = `GNews API request failed: ${gnewsRes.status} ${errorData?.errors?.join(', ') || 'Unknown error'}`;
+      console.error(errorMsg);
+      throw new Error(errorMsg);
     }
     
     const newsData = await gnewsRes.json();
@@ -139,16 +140,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error: any) {
     console.error('An error occurred in analyze-company-news handler:', error);
-    console.error('Error stack:', error.stack);
-    console.error('Full error object:', JSON.stringify(error, null, 2));
-    
-    // より詳細なエラーメッセージを返す
-    const errorMessage = error.message || 'Unknown error occurred';
-    const statusCode = error.statusCode || 500;
-    
-    res.status(statusCode).json({ 
-      error: errorMessage,
-      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
-    });
+    res.status(500).json({ error: error.message || 'サーバーでエラーが発生しました。' });
   }
 }
