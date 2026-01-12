@@ -303,4 +303,32 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: '記事本文を取得できませんでした。' });
     }
 
-    // 3) Gemini（モデル＆versio
+    // 3) Gemini（モデル＆version 自動選択 → generateContent）
+    const prompt =
+      `あなたはマーケットアナリストです。` +
+      `「${companyName}」について、直近ニュースを根拠にした分析レポートをMarkdownで作成してください。\n\n` +
+      `# 必須構成\n` +
+      `- 主要トピック（箇条書き）\n` +
+      `- ポジティブ要因 / ネガティブ要因\n` +
+      `- 今後の注目点（短期/中期）\n` +
+      `- 参考（ニュース要約）\n\n` +
+      `# ニュース本文（抜粋）\n${combinedText}`;
+
+    const generated = await generateWithAutoPick(geminiApiKey, prompt);
+    console.log('[DEBUG] Gemini picked:', { version: generated.version, model: generated.model });
+
+    const report = generated.text.trim();
+
+    // 4) キャッシュ保存（失敗しても本処理は成功扱い）
+    try {
+      await kvSetEx(cacheKey, report, 86400 * 7);
+    } catch (e: any) {
+      console.warn(`[WARN] KV set skipped: ${String(e?.message ?? e)}`);
+    }
+
+    return res.status(200).json({ report, cached: false });
+  } catch (error: any) {
+    console.error('Final Error Handler:', error?.message ?? error);
+    return res.status(500).json({ error: error?.message ?? String(error) });
+  }
+}
