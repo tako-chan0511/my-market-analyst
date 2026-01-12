@@ -1,0 +1,43 @@
+name: KV Keep Alive (Upstash)
+
+on:
+  schedule:
+    # 3日に1回 / 日本時間 09:05（UTC 00:05）
+    - cron: '5 0 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  keep_alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Upstash REST /info
+        env:
+          KV_REST_API_URL: ${{ secrets.MARKETKV_KV_REST_API_URL }}
+          KV_REST_API_TOKEN: ${{ secrets.MARKETKV_KV_REST_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${KV_REST_API_URL:-}" ] || [ -z "${KV_REST_API_TOKEN:-}" ]; then
+            echo "Secrets MARKETKV_KV_REST_API_URL / MARKETKV_KV_REST_API_TOKEN are not set."
+            exit 1
+          fi
+
+          URL="${KV_REST_API_URL%/}/info"
+          echo "POST ${URL}"
+
+          BODY="$(curl -sS -X POST "${URL}" \
+            -H "Authorization: Bearer ${KV_REST_API_TOKEN}" \
+            --max-time 20 --retry 3 --retry-delay 2)"
+
+          echo "Response: ${BODY}"
+
+          # UpstashはHTTP=200でも {"error": "..."} が返ることがあるので判定
+          if echo "${BODY}" | grep -q '"error"'; then
+            # 一時レート制限は keep-alive としては成功扱い（必要なら exit 1 に変更OK）
+            if echo "${BODY}" | grep -qi 'temporarily rate-limited'; then
+              echo "WARN: temporarily rate-limited (treated as success for keep-alive)."
+              exit 0
+            fi
+            echo "ERROR: Upstash returned error."
+            exit 1
+          fi
