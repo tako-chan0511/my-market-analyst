@@ -86,6 +86,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.log('GNews response:', JSON.stringify(newsData).substring(0, 500));
     
     const articles = newsData.articles || [];
+    console.log('Articles type:', typeof articles, 'Is array:', Array.isArray(articles), 'Length:', articles?.length);
     
     if (!Array.isArray(articles)) {
       console.error('Articles is not an array:', typeof articles, articles);
@@ -97,7 +98,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     // 4. 各ニュース記事の本文を並行してスクレイピング
+    console.log('About to call articles.map with', articles.length, 'articles');
     const scrapingPromises = articles.map((article: any) => scrapeArticleText(article.url));
+    console.log('Scraping promises created:', scrapingPromises.length);
     const allArticleTexts = (await Promise.all(scrapingPromises)).filter(text => text.length > 100);
 
     if (allArticleTexts.length === 0) {
@@ -153,6 +156,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error: any) {
     console.error('An error occurred in analyze-company-news handler:', error);
-    res.status(500).json({ error: error.message || 'サーバーでエラーが発生しました。' });
+    console.error('Error type:', error.constructor.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    const errorMessage = error.message || 'サーバーでエラーが発生しました。';
+    res.status(500).json({ error: errorMessage });
   }
 }
