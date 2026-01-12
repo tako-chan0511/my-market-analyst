@@ -66,11 +66,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       apikey: gnewsApiKey,
     });
     const gnewsUrl = `https://gnews.io/api/v4/search?${gnewsParams.toString()}`;
+    console.log('Fetching GNews from:', gnewsUrl.replace(gnewsApiKey, 'REDACTED'));
     const gnewsRes = await fetch(gnewsUrl);
-    if (!gnewsRes.ok) throw new Error('GNews APIからのニュース取得に失敗しました。');
+    
+    if (!gnewsRes.ok) {
+      const errorText = await gnewsRes.text();
+      console.error(`GNews API Error: ${gnewsRes.status}`, errorText);
+      throw new Error(`GNews APIからのニュース取得に失敗しました (ステータス: ${gnewsRes.status})`);
+    }
     
     const newsData = await gnewsRes.json();
+    console.log('GNews response:', JSON.stringify(newsData).substring(0, 500));
+    
     const articles = newsData.articles || [];
+    
+    if (!Array.isArray(articles)) {
+      console.error('Articles is not an array:', typeof articles, articles);
+      throw new Error('GNews APIからの応答が期待される形式ではありません');
+    }
 
     if (articles.length === 0) {
       return res.status(404).json({ error: '関連するニュースが見つかりませんでした。' });
@@ -104,7 +117,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
     });
 
-    if (!geminiRes.ok) throw new Error(`AI APIがエラー: ${geminiRes.status}`);
+    if (!geminiRes.ok) {
+      const errorText = await geminiRes.text();
+      console.error(`Gemini API Error: ${geminiRes.status}`, errorText);
+      throw new Error(`AI API がエラー: ${geminiRes.status} - ${errorText.substring(0, 200)}`);
+    }
     
     const geminiData = await geminiRes.json();
     const analysisReport = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -122,6 +139,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   } catch (error: any) {
     console.error('An error occurred in analyze-company-news handler:', error);
-    res.status(500).json({ error: error.message });
+    console.error('Error stack:', error.stack);
+    console.error('Full error object:', JSON.stringify(error, null, 2));
+    
+    // より詳細なエラーメッセージを返す
+    const errorMessage = error.message || 'Unknown error occurred';
+    const statusCode = error.statusCode || 500;
+    
+    res.status(statusCode).json({ 
+      error: errorMessage,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
   }
 }

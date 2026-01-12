@@ -73,6 +73,9 @@ const qaHistory = ref<{ question: string; answer: string }[]>([]);
 const loadingAnswer = ref(false);
 const errorAnswer = ref('');
 
+// API エンドポイント設定（開発環境と本番環境で切り替え）
+const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001' : '';
+
 // --- Methods ---
 
 const getAnalysis = async () => {
@@ -86,7 +89,8 @@ const getAnalysis = async () => {
   qaHistory.value = [];
 
   try {
-    const res = await fetch('/api/analyze-company-news', {
+    const apiUrl = `${API_BASE_URL}/api/analyze-company-news`;
+    const res = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ companyName: companyName.value }),
@@ -94,12 +98,15 @@ const getAnalysis = async () => {
     const data = await res.json();
 
     if (!res.ok) {
-      throw new Error(data.error || '分析に失敗しました。');
+      const errorMsg = data.error || '分析に失敗しました。';
+      const details = data.details ? `\n詳細: ${data.details}` : '';
+      throw new Error(errorMsg + details);
     }
     analysisReport.value = data.report;
     
   } catch (e: any) {
     error.value = e.message;
+    console.error('Analysis error:', e);
   } finally {
     loading.value = false;
   }
@@ -113,7 +120,8 @@ const askQuestion = async () => {
   const currentQuestion = followUpQuestion.value;
   
   try {
-    const res = await fetch('/api/ask-follow-up', {
+    const apiUrl = `${API_BASE_URL}/api/ask-follow-up`;
+    const res = await fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
