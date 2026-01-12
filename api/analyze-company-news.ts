@@ -67,44 +67,48 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
     const gnewsUrl = `https://gnews.io/api/v4/search?${gnewsParams.toString()}`;
     console.log('Fetching GNews from:', gnewsUrl.replace(gnewsApiKey, 'REDACTED'));
-    const gnewsRes = await fetch(gnewsUrl);
     
-    let newsData;
+    let newsData: any;
     try {
+      const gnewsRes = await fetch(gnewsUrl);
       newsData = await gnewsRes.json();
-    } catch (e) {
-      console.error('Failed to parse GNews response:', e);
-      throw new Error('GNews APIからのレスポンスが不正な形式です');
+      console.log('GNews status:', gnewsRes.status, 'Data:', JSON.stringify(newsData).substring(0, 300));
+      
+      if (!gnewsRes.ok) {
+        const errorMsg = `GNews API Error: ${gnewsRes.status} ${newsData?.errors?.join(', ') || JSON.stringify(newsData)}`;
+        console.error(errorMsg);
+        throw new Error(errorMsg);
+      }
+    } catch (e: any) {
+      console.error('GNews fetch error:', e.message);
+      throw new Error(`GNews APIの呼び出しに失敗しました: ${e.message}`);
     }
     
-    if (!gnewsRes.ok) {
-      const errorMsg = `GNews API request failed: ${gnewsRes.status} ${newsData?.errors?.join(', ') || 'Unknown error'}`;
-      console.error(errorMsg);
-      throw new Error(errorMsg);
+    // articles を安全に取得
+    if (!newsData || typeof newsData !== 'object') {
+      console.error('newsData is not an object:', typeof newsData, newsData);
+      throw new Error('GNews APIからの応答が不正です');
     }
     
-    console.log('GNews response:', JSON.stringify(newsData).substring(0, 500));
-    
-    const articles = newsData.articles || [];
-    console.log('Articles type:', typeof articles, 'Is array:', Array.isArray(articles), 'Length:', articles?.length);
-    
-    if (!Array.isArray(articles)) {
-      console.error('Articles is not an array:', typeof articles, articles);
-      throw new Error('GNews APIからの応答が期待される形式ではありません');
-    }
+    const articles = Array.isArray(newsData.articles) ? newsData.articles : [];
+    console.log('Articles count:', articles.length);
 
     if (articles.length === 0) {
       return res.status(404).json({ error: '関連するニュースが見つかりませんでした。' });
     }
 
     // 4. 各ニュース記事の本文を並行してスクレイピング
-    console.log('About to call articles.map with', articles.length, 'articles');
-    const scrapingPromises = articles.map((article: any) => scrapeArticleText(article.url));
-    console.log('Scraping promises created:', scrapingPromises.length);
-    const allArticleTexts = (await Promise.all(scrapingPromises)).filter(text => text.length > 100);
+    let allArticleTexts: string[];
+    try {
+      const scrapingPromises = articles.map((article: any) => scrapeArticleText(article.url));
+      allArticleTexts = (await Promise.all(scrapingPromises)).filter(text => text.length > 100);
 
-    if (allArticleTexts.length === 0) {
-      throw new Error('ニュース記事から十分なテキストを抽出できませんでした。');
+      if (allArticleTexts.length === 0) {
+        throw new Error('ニュース記事から十分なテキストを抽出できませんでした。');
+      }
+    } catch (e: any) {
+      console.error('Scraping error:', e.message);
+      throw e;
     }
 
     // 5. Gemini APIに分析を依頼
